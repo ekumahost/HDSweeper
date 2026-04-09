@@ -1,0 +1,27 @@
+{
+    "name": "hdsweeper",
+    "version": "1.0.0",
+    "description": "HD Wallet Sweep Tool — Sweep EVM HD wallets to custodial destination",
+    "main": "dist/server.js",
+    "scripts": {
+        "build": "tsc",
+        "dev": "ts-node -r tsconfig-paths/register src/server.ts",
+        "start": "node dist/server.js",
+        "seed": "ts-node -r tsconfig-paths/register src/config/seed.ts"
+    },
+    "dependencies": {
+        "@hapi/hapi": "^21.3.0",
+        "@hapi/inert": "^7.1.0",
+        "dotenv": "^16.3.1",
+        "ethers": "^5.7.2",
+        "mongoose": "^7.6.0"
+    },
+    "devDependencies": {
+        "@types/hapi__hapi": "^20.0.13",
+        "@types/hapi__inert": "^5.2.6",
+        "@types/node": "^20.8.0",
+        "ts-node": "^10.9.1",
+        "tsconfig-paths": "^4.2.0",
+        "typescript": "^5.2.2"
+    }
+}
