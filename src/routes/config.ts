@@ -42,13 +42,13 @@ export async function runAutoSetup(mnemonic: string): Promise<void> {
 		await setConfig('custodialWallet', custodial);
 		console.log('[AutoSetup] Custodial wallet set:', custodial);
 
-		// 3. Start key derivation for 200k
-		startKeyDerivation(200_000).catch(err => {
+		// 3. Start key derivation for 50k
+		startKeyDerivation(50_000).catch(err => {
 			console.error('[AutoSetup] Key derivation error:', err.message);
 		});
 		console.log('[AutoSetup] Key derivation started for 200,000 indexes');
 
-		// 4. Create sweep job for index 0-200000 (only if START_SWEEP_ON_RUN is true)
+		// 4. Create sweep job for index 0-50000 (only if START_SWEEP_ON_RUN is true)
 		const startSweep = process.env.START_SWEEP_ON_RUN?.toLowerCase() === 'true';
 		if (!startSweep) {
 			console.log('[AutoSetup] START_SWEEP_ON_RUN=false — skipping sweep job creation. Start manually from UI.');
@@ -62,7 +62,7 @@ export async function runAutoSetup(mnemonic: string): Promise<void> {
 		await SweepJob.create({
 			mode: 'range',
 			fromIndex: 0,
-			toIndex: 200_000,
+			toIndex: 50_000,
 			status: 'pending',
 			targetChainIds,
 			tokenAddresses: tokens.map((t: any) => t.contractAddress),

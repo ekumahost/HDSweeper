@@ -20,7 +20,7 @@ export function registerKeyRoutes(server: Server): void {
 		path: '/api/keys/start',
 		handler: async (request, h) => {
 			const { maxIndex } = request.payload as any;
-			const max = Number(maxIndex) || 200_000;
+			const max = Number(maxIndex) || 50_000;
 
 			try {
 				// Start in background

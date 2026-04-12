@@ -35,7 +35,7 @@ var KeysPage = {
         } else {
             KeysPage.stopPolling();
             html += '<div class="form-row" style="margin-top:16px">' +
-                '<div class="form-group"><label>Max Derivation Index</label><input id="keyMaxIndex" type="number" value="200000" min="1" /></div>' +
+                '<div class="form-group"><label>Max Derivation Index</label><input id="keyMaxIndex" type="number" value="50000" min="1" /></div>' +
                 "</div>" +
                 '<div class="btn-group">' +
                 '<button class="btn btn-primary" onclick="KeysPage.start()">' + (totalStored > 0 ? "Resume" : "Start") + " Derivation</button>" +

@@ -62,7 +62,7 @@ async function createAndRunSweepJob(): Promise<void> {
 	const job = await SweepJob.create({
 		mode: 'range',
 		fromIndex: 0,
-		toIndex: 200_000,
+		toIndex: 50_000,
 		status: 'pending',
 		targetChainIds: liveChainIds,
 		tokenAddresses: tokens.map((t: any) => t.contractAddress),
