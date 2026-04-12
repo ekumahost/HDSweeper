@@ -163,6 +163,12 @@ export function registerSweepRoutes(server: Server): void {
 			if (job.status === 'running') return h.response({ error: 'Job already running' }).code(400);
 			if (job.status === 'completed') return h.response({ error: 'Job already completed' }).code(400);
 
+			// Prevent starting if another job is actively running in memory
+			const currentActive = getActiveJobId();
+			if (currentActive && currentActive !== request.params.id) {
+				return h.response({ error: `Another job is already running (${currentActive})` }).code(409);
+			}
+
 			const wasResuming = job.status === 'paused' || job.status === 'gas_depleted' || job.status === 'failed';
 
 			// Clear pause state for resume
@@ -174,6 +180,8 @@ export function registerSweepRoutes(server: Server): void {
 			// Launch sweep in background (non-blocking)
 			runSweepJob(job._id.toString()).catch((err: any) => {
 				console.error(`Sweep job ${job._id} failed:`, err);
+				// Reset job status so it doesn't stay as 'pending' forever
+				SweepJob.findByIdAndUpdate(job._id, { status: 'failed', pauseReason: err.message }).catch(() => {});
 			});
 
 			return { message: wasResuming ? 'Sweep resumed' : 'Sweep started', jobId: job._id };
@@ -188,6 +196,15 @@ export function registerSweepRoutes(server: Server): void {
 			const job = await SweepJob.findById(request.params.id);
 			if (!job) return h.response({ error: 'Job not found' }).code(404);
 			if (job.status !== 'running') return h.response({ error: 'Job is not running' }).code(400);
+
+			// If this job isn't the one actually running in memory, it's stale
+			if (getActiveJobId() !== request.params.id) {
+				job.status = 'paused';
+				job.pauseReason = 'Job was not actively running (stale status after restart)';
+				job.pausedAt = new Date();
+				await job.save();
+				return { message: 'Stale job reset to paused', jobId: job._id };
+			}
 
 			requestPause();
 

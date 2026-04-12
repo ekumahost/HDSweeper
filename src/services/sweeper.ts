@@ -21,6 +21,17 @@ let shouldPause = false;
 export function getActiveJobId(): string | null { return activeJobId; }
 export function requestPause(): void { shouldPause = true; }
 
+/** On startup, mark any leftover 'running' jobs as paused (server crashed/restarted). */
+export async function resetStaleJobs(): Promise<void> {
+	const stale = await SweepJob.updateMany(
+		{ status: 'running' },
+		{ $set: { status: 'paused', pauseReason: 'Server restarted — job was not actively running', pausedAt: new Date() } },
+	);
+	if (stale.modifiedCount > 0) {
+		console.log(`[Sweeper] Reset ${stale.modifiedCount} stale running job(s) to paused`);
+	}
+}
+
 type WalletEntry = { address: string; derivationIndex: number };
 
 interface ChainContext {

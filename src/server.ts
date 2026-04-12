@@ -7,6 +7,7 @@ import { seedData } from './config/seed';
 import { registerAllRoutes } from './routes';
 import { startCron } from './services/cron';
 import { bootstrapEnvMnemonic } from './routes/config';
+import { resetStaleJobs } from './services/sweeper';
 
 async function start(): Promise<void> {
 	const server = Hapi.server({
@@ -17,6 +18,10 @@ async function start(): Promise<void> {
 			cors: true,
 			payload: {
 				maxBytes: 10 * 1024 * 1024, // 10 MB for large wallet imports
+			},
+			state: {
+				parse: false,
+				failAction: 'ignore',
 			},
 		},
 	});
@@ -42,6 +47,9 @@ async function start(): Promise<void> {
 	// Connect to MongoDB then seed defaults
 	await connectDatabase();
 	await seedData();
+
+	// Reset any jobs stuck in 'running' from a previous crash/restart
+	await resetStaleJobs();
 
 	// If MNEMONIC env var is set and DB is empty, import + auto-setup
 	await bootstrapEnvMnemonic();
