@@ -5,7 +5,7 @@ import { getActiveJobId, runSweepJob } from './sweeper';
 import { getConfig } from '../models/AppConfig';
 import { getProvider } from './blockchain';
 
-const CRON_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const CRON_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 let cronTimer: ReturnType<typeof setInterval> | null = null;
 
 async function createAndRunSweepJob(): Promise<void> {
