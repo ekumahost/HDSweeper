@@ -16,7 +16,7 @@ HDSWEEPER derives wallets from a BIP-44 mnemonic, scans them for token and nativ
 - **Gas management** — Auto-funds target wallets from a gas wallet, returns unused gas
 - **Checkpoint & resume** — Pause mid-sweep, resume from exactly where it stopped
 - **Dead RPC detection** — Tests each RPC before job creation and during sweeps; skips unreachable chains
-- **Cron automation** — Auto-creates and runs sweep jobs every 6 hours
+- **Direct sweeper automation** — Start once from Dashboard, then it runs forever from DB toggle and executes daily at 07:00 UTC
 - **AES-256 encrypted mnemonic** — Private keys are never stored; derived on-the-fly
 - **Dark-themed web UI** — 10-tab SPA for full control and monitoring
 - **Env-based bootstrap** — Set mnemonic in `.env` for zero-touch startup
@@ -66,7 +66,11 @@ ENCRYPTION_KEY=<random-64-char-hex-string>
 MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
 CUSTODIAL_WALLET=0xYourCustodialAddressHere
 ENABLE_CRON=true
-START_SWEEP_ON_RUN=false
+DIRECT_SWEEP_HOUR_UTC=7
+DIRECT_SWEEP_MINUTE_UTC=0
+UNREMITTED_BALANCES_BASE_URL=https://mobilelab.xend.africa
+DIRECT_SWEEP_DERIVATION_SEARCH_WINDOW=20000
+DIRECT_SWEEP_DERIVATION_MAX_INDEX=500000
 ```
 
 | Variable | Default | Description |
@@ -77,8 +81,12 @@ START_SWEEP_ON_RUN=false
 | `ENCRYPTION_KEY` | — | AES-256 key for mnemonic encryption (min 32 chars) |
 | `MNEMONIC` | *(empty)* | 12-word BIP-39 mnemonic. If set, auto-imports on first run and triggers setup (gas wallet, custodial, key derivation). Leave empty to enter via the UI instead |
 | `CUSTODIAL_WALLET` | `0x6d29...5A2` | Destination address for all swept funds. Falls back to a hardcoded default if empty |
-| `ENABLE_CRON` | `true` | Set `false` to disable the automatic 6-hour sweep cycle entirely. Sweep jobs can still be created and started manually from the UI |
-| `START_SWEEP_ON_RUN` | `false` | Controls two behaviors: **(1)** When the mnemonic is first saved (via env or UI), setting `true` auto-creates a sweep job for indexes 0–200,000; `false` skips job creation so you can start sweeps manually. **(2)** When cron is enabled, setting `true` triggers the first sweep 30 seconds after boot; `false` waits for the next 6-hour interval |
+| `ENABLE_CRON` | `true` | Set `false` to disable automatic direct sweeper scheduling |
+| `DIRECT_SWEEP_HOUR_UTC` | `7` | Optional. Hour (UTC) for daily DIRECT SWEEPER run; hardcoded default is `7` |
+| `DIRECT_SWEEP_MINUTE_UTC` | `0` | Optional. Minute (UTC) for daily DIRECT SWEEPER run; hardcoded default is `0` |
+| `UNREMITTED_BALANCES_BASE_URL` | `https://mobilelab.xend.africa` | Optional. Hook integration base URL; hardcoded default points to production |
+| `DIRECT_SWEEP_DERIVATION_SEARCH_WINDOW` | `20000` | Optional. How many new HD indexes DIRECT SWEEPER should derive per cycle when a wallet is missing |
+| `DIRECT_SWEEP_DERIVATION_MAX_INDEX` | `500000` | Optional. Upper safety limit for auto-expanded HD derivation search |
 
 ### Run
 
@@ -107,9 +115,9 @@ Open [http://127.0.0.1:4900](http://127.0.0.1:4900) in your browser.
    - Set gas wallet (index 0)
    - Set custodial destination
    - Derive 200,000 wallet indexes
-   - Create a pending sweep job
+  - Do not create legacy sweep jobs automatically; start them manually when needed
 4. Start Hapi server
-5. Start cron scheduler (sweep every 6 hours)
+5. Start cron scheduler (DIRECT SWEEPER runs only when DB toggle is enabled, then daily at 07:00 UTC)
 
 ---
 
@@ -194,9 +202,10 @@ src/
 │   └── wallets.ts         # Wallet list import (paste/CSV)
 ├── services/
 │   ├── blockchain.ts      # Provider management, balance checks, RPC validation
+│   ├── directSweeper.ts   # Unremitted-balances sync + direct sweep orchestration
 │   ├── keyDerivation.ts   # HD derivation, encryption, bulk derive
 │   ├── sweeper.ts         # Core sweep engine
-│   └── cron.ts            # 6-hour auto-sweep scheduler
+│   └── cron.ts            # DIRECT SWEEPER scheduler (startup + daily run)
 └── public/                # Static SPA frontend
     ├── index.html
     ├── css/style.css

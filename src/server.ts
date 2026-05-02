@@ -57,7 +57,7 @@ async function start(): Promise<void> {
 	await server.start();
 	console.log(`\n  HDSWEEPER running at ${server.info.uri}\n`);
 
-	// Start cron: auto-create & run sweep job every 6 hours
+	// Start cron: DIRECT SWEEPER on startup then daily schedule
 	startCron();
 }
 

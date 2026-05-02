@@ -32,7 +32,7 @@ export async function resetStaleJobs(): Promise<void> {
 	}
 }
 
-type WalletEntry = { address: string; derivationIndex: number };
+type WalletEntry = { address: string; derivationIndex: number; chainId?: number };
 
 interface ChainContext {
 	chainId: number;
@@ -348,7 +348,7 @@ export async function runSweepJob(jobId: string): Promise<void> {
 	const gasFunderAddress = gasFunderChild.address.toLowerCase();
 	const gasFunderKey = gasFunderChild.privateKey;
 
-	// Load wallets: from list or from index range
+	// Load wallets: from list, index range, or direct payload
 	let wallets: WalletEntry[];
 
 	if (job.mode === 'range' && job.fromIndex != null && job.toIndex != null) {
@@ -357,6 +357,15 @@ export async function runSweepJob(jobId: string): Promise<void> {
 			const child = parentNode.derivePath(String(idx));
 			wallets.push({ address: child.address.toLowerCase(), derivationIndex: idx });
 		}
+	} else if (job.mode === 'direct') {
+		const directWallets = ((job as any).directWallets || []) as Array<{ address: string; derivationIndex: number; chainId: number }>;
+		wallets = directWallets
+			.filter(w => typeof w.address === 'string' && w.derivationIndex != null && w.chainId != null)
+			.map(w => ({
+				address: w.address.toLowerCase(),
+				derivationIndex: Number(w.derivationIndex),
+				chainId: Number(w.chainId),
+			}));
 	} else {
 		const raw = await WalletAddress.find({ listId: job.listId, isMatched: true }).lean();
 		wallets = raw.map(w => ({ address: w.address.toLowerCase(), derivationIndex: (w as any).derivationIndex }));
@@ -451,9 +460,24 @@ export async function runSweepJob(jobId: string): Promise<void> {
 		}
 
 		// Sweep ALL chains in parallel
+		const walletsByChain = new Map<number, WalletEntry[]>();
+		if (job.mode === 'direct') {
+			for (const wallet of wallets) {
+				if (wallet.chainId == null) continue;
+				const list = walletsByChain.get(wallet.chainId) || [];
+				list.push(wallet);
+				walletsByChain.set(wallet.chainId, list);
+			}
+		}
+
 		const chainResults = await Promise.allSettled(
 			chainContexts.map(ctx =>
-				sweepChain(ctx, wallets, parentNode, destination, jobId,
+				sweepChain(
+					ctx,
+					job.mode === 'direct' ? (walletsByChain.get(ctx.chainId) || []) : wallets,
+					parentNode,
+					destination,
+					jobId,
 					txDoneSet, gasFundedSet, sweptSet, jobCounters, saveCheckpoint)
 			)
 		);

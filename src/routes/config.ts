@@ -3,11 +3,9 @@ import { getConfig, setConfig } from '../models/AppConfig';
 import { encryptMnemonic, deriveAddress, getMnemonic, startKeyDerivation } from '../services/keyDerivation';
 import GasWallet from '../models/GasWallet';
 import RpcEndpoint from '../models/RpcEndpoint';
-import TokenContract from '../models/TokenContract';
-import SweepJob from '../models/SweepJob';
 import { getNativeBalance } from '../services/blockchain';
 
-/** Auto-setup pipeline: gas wallet, custodial, key derivation, sweep job */
+/** Auto-setup pipeline: gas wallet, custodial, key derivation */
 export async function runAutoSetup(mnemonic: string): Promise<void> {
 	try {
 		const first = deriveAddress(mnemonic, 0);
@@ -47,37 +45,7 @@ export async function runAutoSetup(mnemonic: string): Promise<void> {
 			console.error('[AutoSetup] Key derivation error:', err.message);
 		});
 		console.log('[AutoSetup] Key derivation started for 200,000 indexes');
-
-		// 4. Create sweep job for index 0-50000 (only if START_SWEEP_ON_RUN is true)
-		const startSweep = process.env.START_SWEEP_ON_RUN?.toLowerCase() === 'true';
-		if (!startSweep) {
-			console.log('[AutoSetup] START_SWEEP_ON_RUN=false — skipping sweep job creation. Start manually from UI.');
-			return;
-		}
-
-		const activeRpcs = await RpcEndpoint.find({ isActive: true }).lean();
-		const targetChainIds = activeRpcs.map((r: any) => r.chainId);
-		const tokens = await TokenContract.find({ isActive: true, chainId: { $in: targetChainIds } }).lean();
-
-		await SweepJob.create({
-			mode: 'range',
-			fromIndex: 0,
-			toIndex: 50_000,
-			status: 'pending',
-			targetChainIds,
-			tokenAddresses: tokens.map((t: any) => t.contractAddress),
-			gasLimitPerTx: 65000,
-			maxGasPrice: '50',
-			batchSize: 20,
-			totalWallets: 200_001,
-			processedWallets: 0,
-			totalTxSent: 0,
-			totalTxFailed: 0,
-			sweptKeys: [],
-			completedTxKeys: [],
-			gasFundedKeys: [],
-		});
-		console.log('[AutoSetup] Sweep job created for index 0–200,000');
+		console.log('[AutoSetup] Legacy sweep jobs are manual-only and will not be auto-created.');
 	} catch (err: any) {
 		console.error('[AutoSetup] Error:', err.message);
 	}
@@ -128,7 +96,7 @@ export function registerConfigRoutes(server: Server): void {
 		},
 	});
 
-	// Save mnemonic — then auto-setup gas wallet, custodial, key derivation, and sweep job
+	// Save mnemonic — then auto-setup gas wallet, custodial, and key derivation
 	server.route({
 		method: 'POST',
 		path: '/api/config/mnemonic',

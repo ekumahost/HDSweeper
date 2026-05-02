@@ -1,124 +1,70 @@
-import SweepJob from '../models/SweepJob';
-import RpcEndpoint from '../models/RpcEndpoint';
-import TokenContract from '../models/TokenContract';
-import { getActiveJobId, runSweepJob } from './sweeper';
+import { runDirectSweeperCycle } from './directSweeper';
 import { getConfig } from '../models/AppConfig';
-import { getProvider } from './blockchain';
+import {
+	DEFAULT_DIRECT_SWEEP_HOUR_UTC,
+	DEFAULT_DIRECT_SWEEP_MINUTE_UTC,
+} from '../config/directSweeperDefaults';
 
-const CRON_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-let cronTimer: ReturnType<typeof setInterval> | null = null;
+const DIRECT_SWEEPER_ENABLED_KEY = 'directSweeperEnabled';
 
-async function createAndRunSweepJob(): Promise<void> {
-	// Skip if a sweep is already running
-	if (getActiveJobId()) {
-		console.log('[Cron] Sweep job already running, skipping.');
-		return;
+let nextRunTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getNextRunDelayMs(hour: number, minute: number): number {
+	const now = new Date();
+	const next = new Date(now);
+	next.setUTCHours(hour, minute, 0, 0);
+	if (next.getTime() <= now.getTime()) {
+		next.setUTCDate(next.getUTCDate() + 1);
 	}
+	return next.getTime() - now.getTime();
+}
 
-	// Check prerequisites
-	const mnemonic = await getConfig('mnemonic');
-	const custodial = await getConfig('custodialWallet');
-	if (!mnemonic || !custodial) {
-		console.log('[Cron] Mnemonic or custodial wallet not configured, skipping.');
-		return;
-	}
-
-	// Check if there's already a pending/running job
-	const existing = await SweepJob.findOne({ status: { $in: ['pending', 'running'] } });
-	if (existing) {
-		console.log('[Cron] Pending/running job exists, skipping creation.');
-		return;
-	}
-
-	// Build job — test each RPC, skip dead ones
-	const activeRpcs = await RpcEndpoint.find({ isActive: true }).lean();
-	const liveChainIds: number[] = [];
-	const deadChains: string[] = [];
-
-	for (const rpc of activeRpcs) {
-		try {
-			const provider = await getProvider((rpc as any).chainId);
-			if (provider) {
-				liveChainIds.push((rpc as any).chainId);
-			} else {
-				deadChains.push(`${(rpc as any).chainName} (${(rpc as any).chainId})`);
-			}
-		} catch {
-			deadChains.push(`${(rpc as any).chainName} (${(rpc as any).chainId})`);
-		}
-	}
-
-	if (deadChains.length > 0) {
-		console.warn(`[Cron] Dead RPCs skipped: ${deadChains.join(', ')}`);
-	}
-
-	if (liveChainIds.length === 0) {
-		console.log('[Cron] All RPCs unreachable, skipping.');
-		return;
-	}
-
-	const tokens = await TokenContract.find({ isActive: true, chainId: { $in: liveChainIds } }).lean();
-
-	const job = await SweepJob.create({
-		mode: 'range',
-		fromIndex: 0,
-		toIndex: 50_000,
-		status: 'pending',
-		targetChainIds: liveChainIds,
-		tokenAddresses: tokens.map((t: any) => t.contractAddress),
-		gasLimitPerTx: 65000,
-		maxGasPrice: '50',
-		batchSize: 20,
-		totalWallets: 200_001,
-		processedWallets: 0,
-		totalTxSent: 0,
-		totalTxFailed: 0,
-		sweptKeys: [],
-		completedTxKeys: [],
-		gasFundedKeys: [],
-	});
-
-	console.log(`[Cron] Sweep job created: ${job._id} (index 0–200,000)`);
-
-	// Start it
+async function runScheduledDirectSweep(): Promise<void> {
 	try {
-		await runSweepJob(job._id.toString());
-		console.log(`[Cron] Sweep job ${job._id} finished.`);
+		const enabled = Boolean(await getConfig(DIRECT_SWEEPER_ENABLED_KEY));
+		if (!enabled) {
+			console.log('[Cron] DIRECT SWEEPER is disabled in DB. Skipping run.');
+			return;
+		}
+		await runDirectSweeperCycle();
 	} catch (err: any) {
-		console.error(`[Cron] Sweep job ${job._id} error:`, err.message);
+		console.error('[Cron] Direct sweeper cycle failed:', err.message);
 	}
+}
+
+function scheduleDailyDirectSweep(hour: number, minute: number): void {
+	const delay = getNextRunDelayMs(hour, minute);
+	const runAt = new Date(Date.now() + delay);
+	console.log(`[Cron] Next DIRECT SWEEPER run scheduled at ${runAt.toISOString()}`);
+
+	nextRunTimer = setTimeout(async () => {
+		await runScheduledDirectSweep();
+		scheduleDailyDirectSweep(hour, minute);
+	}, delay);
 }
 
 export function startCron(): void {
 	const enableCron = process.env.ENABLE_CRON?.toLowerCase() !== 'false';
-	const startOnRun = process.env.START_SWEEP_ON_RUN?.toLowerCase() === 'true';
+	const scheduleHour = Number(process.env.DIRECT_SWEEP_HOUR_UTC || DEFAULT_DIRECT_SWEEP_HOUR_UTC);
+	const scheduleMinute = Number(process.env.DIRECT_SWEEP_MINUTE_UTC || DEFAULT_DIRECT_SWEEP_MINUTE_UTC);
 
 	if (!enableCron) {
-		console.log('[Cron] Disabled via ENABLE_CRON=false. Sweep jobs must be started manually from the UI.');
+		console.log('[Cron] Disabled via ENABLE_CRON=false.');
 		return;
 	}
 
-	if (cronTimer) return;
-	console.log('[Cron] Scheduled sweep every 6 hours.');
+	if (nextRunTimer) return;
+	console.log(`[Cron] DIRECT SWEEPER daily schedule set to ${scheduleHour.toString().padStart(2, '0')}:${scheduleMinute.toString().padStart(2, '0')} UTC.`);
 
-	// Run first check after 30 seconds only if START_SWEEP_ON_RUN is true
-	if (startOnRun) {
-		console.log('[Cron] START_SWEEP_ON_RUN=true — will auto-sweep 30s after boot.');
-		setTimeout(() => {
-			createAndRunSweepJob().catch(err => console.error('[Cron] Error:', err.message));
-		}, 30_000);
-	} else {
-		console.log('[Cron] START_SWEEP_ON_RUN=false — first sweep will run in 6 hours (or start manually).');
-	}
+	// Run once on boot only if the persistent DB toggle is enabled.
+	runScheduledDirectSweep().catch(err => console.error('[Cron] Error:', err.message));
 
-	cronTimer = setInterval(() => {
-		createAndRunSweepJob().catch(err => console.error('[Cron] Error:', err.message));
-	}, CRON_INTERVAL_MS);
+	scheduleDailyDirectSweep(scheduleHour, scheduleMinute);
 }
 
 export function stopCron(): void {
-	if (cronTimer) {
-		clearInterval(cronTimer);
-		cronTimer = null;
+	if (nextRunTimer) {
+		clearTimeout(nextRunTimer);
+		nextRunTimer = null;
 	}
 }

@@ -4,11 +4,18 @@ export type SweepJobStatus = 'pending' | 'running' | 'paused' | 'completed' | 'f
 
 const schema = new mongoose.Schema(
 	{
-		mode: { type: String, enum: ['list', 'range'], default: 'list' },
+		mode: { type: String, enum: ['list', 'range', 'direct'], default: 'list' },
 		listId: { type: mongoose.Schema.Types.ObjectId, ref: 'WalletList', default: null },
 		listName: { type: String, default: '' },
 		fromIndex: { type: Number, default: null },
 		toIndex: { type: Number, default: null },
+		directWallets: [
+			{
+				address: { type: String, required: true },
+				derivationIndex: { type: Number, required: true },
+				chainId: { type: Number, required: true },
+			},
+		],
 		status: {
 			type: String,
 			enum: ['pending', 'running', 'paused', 'completed', 'failed', 'gas_depleted'],

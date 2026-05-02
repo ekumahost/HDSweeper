@@ -8,6 +8,7 @@ import { registerWalletRoutes } from './wallets';
 import { registerSweepRoutes } from './sweep';
 import { registerLogRoutes } from './logs';
 import { registerBalanceRoutes } from './balances';
+import { registerDirectSweeperRoutes } from './directSweeper';
 
 export function registerAllRoutes(server: Server): void {
 	registerConfigRoutes(server);
@@ -19,4 +20,5 @@ export function registerAllRoutes(server: Server): void {
 	registerSweepRoutes(server);
 	registerLogRoutes(server);
 	registerBalanceRoutes(server);
+	registerDirectSweeperRoutes(server);
 }
